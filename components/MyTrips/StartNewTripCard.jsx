@@ -3,8 +3,10 @@ import React from "react";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Colors } from "@/constants/Colors";
 import * as Animatable from "react-native-animatable";
+import { useRouter } from "expo-router";
 
 const StartNewTripCard = () => {
+  const router = useRouter();
   return (
     <Animatable.View style={styles.container} animation="zoomIn">
       <MaterialIcons
@@ -22,7 +24,10 @@ const StartNewTripCard = () => {
         iterationCount="infinite"
         easing="ease"
       >
-        <TouchableOpacity style={styles.button}>
+        <TouchableOpacity
+          onPress={() => router.push("/create-trip/SearchPlace")}
+          style={styles.button}
+        >
           <Text style={styles.text1}>Begin Your Journey</Text>
         </TouchableOpacity>
       </Animatable.View>
