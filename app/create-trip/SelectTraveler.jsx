@@ -24,16 +24,12 @@ const SelectTraveler = () => {
     setTripData({ ...tripData, traveler: selectedTraveler });
   }, [selectedTraveler]);
 
-  useEffect(() => {
-    console.log(tripData);
-  }, [tripData]);
-
   return (
     <View>
       <View style={styles.subContainer}>
         <View style={styles.header}>
           <GoBack color={"white"} />
-          <Text style={styles.selectTravelerText}>Traveler</Text>
+          <Text style={styles.selectTravelerText}>Select Traveler</Text>
         </View>
         <View style={styles.hr} />
       </View>
@@ -55,14 +51,16 @@ const SelectTraveler = () => {
             )}
           />
         </View>
-        <TouchableOpacity
-          style={styles.continueButton}
-          onPress={() => router.push("/create-trip/SelectDates")}
-        >
-          <Text style={styles.buttonText}>
-            Continue <AntDesign name="arrowright" size={20} color="white" />
-          </Text>
-        </TouchableOpacity>
+        <View style={{ alignItems: "center" }}>
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={() => router.push("/create-trip/SelectDates")}
+          >
+            <Text style={styles.buttonText}>
+              Continue <AntDesign name="arrowright" size={20} color="white" />
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -88,7 +86,7 @@ const styles = StyleSheet.create({
     paddingTop: 28,
     fontSize: 20,
     fontFamily: "QuickSand-Medium",
-    marginLeft: "18%",
+    marginLeft: "11%",
     color: "white",
   },
   hr: {
@@ -121,7 +119,7 @@ const styles = StyleSheet.create({
   continueButton: {
     backgroundColor: Colors.PRIMARY,
     height: 45,
-    width: 320,
+    width: 200,
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
