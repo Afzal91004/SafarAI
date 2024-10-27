@@ -47,7 +47,7 @@ const SelectDates = () => {
   };
 
   return (
-    <View>
+    <View style={styles.container}>
       <View style={styles.subContainer}>
         <View style={styles.header}>
           <GoBack color={"white"} />
@@ -75,7 +75,7 @@ const SelectDates = () => {
           selectedDayTextStyle={{
             color: "white",
           }}
-          // maxRangeDuration={45}
+          maxRangeDuration={7}
         />
       </View>
       <View style={{ alignItems: "center" }}>
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 12,
+    marginTop: 45,
   },
   buttonText: {
     color: "white",
@@ -147,5 +147,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     justifyContent: "center",
     alignItems: "center",
+  },
+  container: {
+    backgroundColor: Colors.light.background,
+    height: "100%",
   },
 });

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import axios from "axios";
 import { debounce } from "lodash";
@@ -26,6 +27,19 @@ const TOKEN_URL =
 const CLIENT_ID = "fb42cbeb-22b6-43c7-a10d-09f6fd8c8121";
 const CLIENT_SECRET = "QrDpu1dSaByajpSaDlcCQX0Z5K8gbbgR";
 
+// Define allowed place types
+const ALLOWED_TYPES = [
+  "locality",
+  "administrative_area_level_1",
+  "administrative_area_level_2",
+  "administrative_area_level_3",
+  "country",
+  "sublocality",
+  "sublocality_level_1",
+  "political",
+  "geocode",
+];
+
 const SearchPlace = () => {
   const [searchText, setSearchText] = useState("");
   const [suggestions, setSuggestions] = useState([]);
@@ -33,15 +47,20 @@ const SearchPlace = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
+  const [debugInfo, setDebugInfo] = useState(null);
 
-  const { tripData, setTripData } = useContext(CreateTripContext);
-
+  const { setTripData } = useContext(CreateTripContext);
   const router = useRouter();
 
+  // Initialize token and location
   useEffect(() => {
-    const getToken = async () => {
+    const initialize = async () => {
+      setIsLoading(true);
       try {
-        const response = await axios.post(
+        console.log("Initializing...");
+
+        // Get authentication token
+        const tokenResponse = await axios.post(
           TOKEN_URL,
           new URLSearchParams({
             grant_type: "client_credentials",
@@ -54,45 +73,57 @@ const SearchPlace = () => {
             },
           }
         );
-        setToken(response.data.access_token);
-      } catch (error) {
-        console.error("Error fetching access token:", error);
-        setError("Failed to authenticate. Please try again later.");
-      }
-    };
 
-    const getUserLocation = async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        setError("Permission to access location was denied");
-        return;
-      }
+        if (!tokenResponse.data?.access_token) {
+          throw new Error("No access token received");
+        }
 
-      try {
-        let location = await Location.getCurrentPositionAsync({});
+        console.log("Token received successfully");
+        setToken(tokenResponse.data.access_token);
+
+        // Get user location
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          throw new Error("Location permission denied");
+        }
+
+        const location = await Location.getCurrentPositionAsync({});
         const { latitude, longitude } = location.coords;
-        setUserLocation(`${latitude},${longitude}`);
-      } catch (error) {
-        console.error("Error getting location:", error);
-        setError(<LocationError />);
-      }
-    };
+        const locationString = `${latitude},${longitude}`;
+        console.log("Location obtained:", locationString);
+        setUserLocation(locationString);
 
-    const initialize = async () => {
-      try {
-        await Promise.all([getToken(), getUserLocation()]);
+        setDebugInfo(`Initialized with location: ${locationString}`);
       } catch (error) {
         console.error("Initialization error:", error);
-        setError("Failed to initialize. Please try again.");
+        setError(
+          error.message === "Location permission denied" ? (
+            <LocationError />
+          ) : (
+            `Initialization failed: ${error.message}`
+          )
+        );
+        Alert.alert(
+          "Initialization Error",
+          `Failed to initialize: ${error.message}. Please restart the app.`
+        );
+      } finally {
+        setIsLoading(false);
       }
     };
 
     initialize();
   }, []);
 
+  // Fetch location suggestions
   const fetchSuggestions = useCallback(
     async (input) => {
-      if (!input || !token || !userLocation) {
+      if (!input?.trim() || !token || !userLocation) {
+        console.log("Missing required data:", {
+          hasInput: !!input?.trim(),
+          hasToken: !!token,
+          hasLocation: !!userLocation,
+        });
         setSuggestions([]);
         return;
       }
@@ -101,23 +132,44 @@ const SearchPlace = () => {
       setError(null);
 
       try {
-        const response = await axios.get(OLA_API_URL, {
+        console.log("Fetching suggestions for:", input);
+        const requestConfig = {
           params: {
             input,
             location: userLocation,
-            radius: 50000,
+            radius: 50000000,
           },
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        });
-        setSuggestions(response.data.predictions);
-      } catch (error) {
-        console.error(
-          "Error fetching suggestions:",
-          error.response ? error.response.data : error.message
+        };
+
+        console.log("Request config:", requestConfig);
+
+        const response = await axios.get(OLA_API_URL, requestConfig);
+
+        console.log("API Response:", response.data);
+
+        if (!response.data?.predictions) {
+          throw new Error("No predictions in response");
+        }
+
+        const filteredSuggestions = response.data.predictions.filter(
+          (prediction) =>
+            prediction.types?.some((type) => ALLOWED_TYPES.includes(type))
         );
-        setError("Failed to fetch suggestions. Please try again.");
+
+        console.log("Filtered suggestions:", filteredSuggestions);
+        setSuggestions(filteredSuggestions);
+        setDebugInfo(`Found ${filteredSuggestions.length} suggestions`);
+      } catch (error) {
+        console.error("Suggestion fetch error:", error);
+        const errorMessage = error.response?.data?.error || error.message;
+        setError(`Failed to fetch suggestions: ${errorMessage}`);
+        Alert.alert(
+          "Search Error",
+          `Failed to fetch suggestions: ${errorMessage}`
+        );
       } finally {
         setIsLoading(false);
       }
@@ -125,9 +177,10 @@ const SearchPlace = () => {
     [token, userLocation]
   );
 
-  const fetchPlaceDetails = async (placeId) => {
+  // Handle place selection
+  const handlePlaceSelection = async (placeId, placeName) => {
     if (!placeId || !token) {
-      setError("Invalid place ID or token.");
+      setError("Invalid place selection");
       return;
     }
 
@@ -135,86 +188,57 @@ const SearchPlace = () => {
     setError(null);
 
     try {
-      const response = await axios.get(`${PLACE_DETAILS_URL}`, {
-        params: {
-          place_id: placeId,
-        },
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-Request-Id": generateUUID(),
-          "X-Correlation-Id": generateUUID(),
-        },
+      console.log("Fetching details for place:", placeId);
+      const response = await axios.get(PLACE_DETAILS_URL, {
+        params: { place_id: placeId },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (response.data && response.data.result) {
-        console.log(
-          "Place Details:",
-          JSON.stringify(response.data.result, null, 2)
-        );
-        setSearchText(response.data.result.name || "");
-        setTripData({
-          locationInfo: {
-            name: response.data.result.name,
-          },
-          coordinates: response.data.result.geometry.location,
-        });
-        router.push("/create-trip/SelectTraveler");
-      } else {
-        throw new Error("Invalid response format");
+      console.log("Place details response:", response.data);
+
+      if (!response.data?.result?.geometry?.location) {
+        throw new Error("Invalid place details received");
       }
+
+      setTripData({
+        locationInfo: {
+          name: placeName,
+          placeId: placeId,
+        },
+        coordinates: response.data.result.geometry.location,
+      });
+
+      router.push("/create-trip/SelectTraveler");
     } catch (error) {
-      const errorMessage = error.response
-        ? `Error: ${
-            error.response.data.error_message || error.response.statusText
-          }`
-        : error.message || "Network Error. Please check your connection.";
-      console.error("Error fetching place details:", errorMessage);
-      setError("Failed to fetch place details. Please try again.");
+      console.error("Place selection error:", error);
+      setError(`Failed to get place details: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Debounced search handler
   const debouncedFetchSuggestions = useCallback(
-    debounce((text) => {
-      if (text.trim() === "") {
-        setSuggestions([]);
-      } else {
-        fetchSuggestions(text);
-      }
-    }, 300),
+    debounce((text) => fetchSuggestions(text), 300),
     [fetchSuggestions]
   );
 
+  // Input change handler
   const handleInputChange = (text) => {
     setSearchText(text);
-    debouncedFetchSuggestions(text);
-  };
-
-  const handleSelectSuggestion = (suggestion) => {
-    console.log("Selected Place:", suggestion);
-    setSearchText(suggestion.structured_formatting.main_text);
-    setSuggestions([]);
-    fetchPlaceDetails(suggestion.place_id);
-  };
-
-  const generateUUID = () => {
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
-      /[xy]/g,
-      function (c) {
-        var r = (Math.random() * 16) | 0,
-          v = c == "x" ? r : (r & 0x3) | 0x8;
-        return v.toString(16);
-      }
-    );
+    if (text.trim()) {
+      debouncedFetchSuggestions(text);
+    } else {
+      setSuggestions([]);
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.subContainer}>
         <View style={styles.header}>
-          <GoBack color={"white"} />
-          <Text style={styles.searchText}>Search</Text>
+          <GoBack color="white" />
+          <Text style={styles.searchText}>Search Location</Text>
         </View>
         <View style={styles.hr} />
       </View>
@@ -222,31 +246,48 @@ const SearchPlace = () => {
       <View style={styles.subContainer2}>
         <TextInput
           style={styles.input}
-          placeholder="Search for a place"
+          placeholder="Search for a city, district, or country"
           value={searchText}
           onChangeText={handleInputChange}
+          autoFocus={true}
+          autoCorrect={false}
         />
 
-        {isLoading && <ActivityIndicator style={styles.loader} />}
+        {isLoading && (
+          <ActivityIndicator style={styles.loader} color={Colors.PRIMARY} />
+        )}
 
         {error && <Text style={styles.errorText}>{error}</Text>}
+
+        {debugInfo && __DEV__ && (
+          <Text style={styles.debugText}>{debugInfo}</Text>
+        )}
 
         {suggestions.length > 0 && !isLoading && (
           <FlatList
             data={suggestions}
             keyExtractor={(item, index) => `${item.place_id}-${index}`}
             renderItem={({ item }) => (
-              <TouchableOpacity onPress={() => handleSelectSuggestion(item)}>
-                <View style={styles.suggestionItem}>
-                  <Text style={styles.mainText}>
-                    {item.structured_formatting.main_text}
-                  </Text>
+              <TouchableOpacity
+                onPress={() =>
+                  handlePlaceSelection(
+                    item.place_id,
+                    item.structured_formatting?.main_text || item.description
+                  )
+                }
+                style={styles.suggestionItem}
+              >
+                <Text style={styles.mainText}>
+                  {item.structured_formatting?.main_text || item.description}
+                </Text>
+                {item.structured_formatting?.secondary_text && (
                   <Text style={styles.secondaryText}>
                     {item.structured_formatting.secondary_text}
                   </Text>
-                </View>
+                )}
               </TouchableOpacity>
             )}
+            style={styles.suggestionsList}
           />
         )}
       </View>
@@ -254,10 +295,10 @@ const SearchPlace = () => {
   );
 };
 
-export default SearchPlace;
-
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: Colors.light.background,
+    height: "100%",
     flex: 1,
   },
   subContainer: {
@@ -295,7 +336,7 @@ const styles = StyleSheet.create({
   },
   subContainer2: {
     padding: 25,
-    color: "white",
+    flex: 1,
   },
   input: {
     height: 40,
@@ -304,23 +345,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     backgroundColor: "white",
     borderRadius: 10,
+    fontFamily: "QuickSand",
+  },
+  suggestionsList: {
+    backgroundColor: "white",
+    borderRadius: 10,
+    marginTop: 5,
+    maxHeight: "80%",
   },
   suggestionItem: {
-    paddingVertical: 10,
-    borderBottomColor: "#ccc",
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderBottomColor: "#eee",
     borderBottomWidth: 1,
   },
   mainText: {
-    fontWeight: "bold",
+    fontFamily: "QuickSand-SemiBold",
+    fontSize: 16,
+    color: "#333",
   },
   secondaryText: {
-    color: "#777",
+    fontFamily: "QuickSand",
+    fontSize: 14,
+    color: "#666",
+    marginTop: 2,
   },
   loader: {
-    marginVertical: 10,
+    marginVertical: 20,
   },
   errorText: {
     color: "red",
     marginVertical: 10,
+    fontFamily: "QuickSand",
+    textAlign: "center",
+  },
+  debugText: {
+    color: "#666",
+    marginVertical: 5,
+    fontSize: 12,
+    textAlign: "center",
   },
 });
+
+export default SearchPlace;

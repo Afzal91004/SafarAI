@@ -25,7 +25,7 @@ const SelectTraveler = () => {
   }, [selectedTraveler]);
 
   return (
-    <View>
+    <View style={styles.container}>
       <View style={styles.subContainer}>
         <View style={styles.header}>
           <GoBack color={"white"} />
@@ -70,6 +70,8 @@ export default SelectTraveler;
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: Colors.light.background,
+    height: "100%",
     flex: 1,
   },
   subContainer: {

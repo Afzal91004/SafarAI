@@ -4,12 +4,15 @@ import GoBack from "../../components/GoBack";
 import { Colors } from "@/constants/Colors";
 import { CreateTripContext } from "../../context/CreateTripContext";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+import { useRouter } from "expo-router";
 
 const ReviewTrip = () => {
   const { tripData, setTripData } = useContext(CreateTripContext);
 
-  const startDate = new Date(tripData.startDate);
-  const endDate = new Date(tripData.endDate);
+  const startDate = new Date(tripData?.startDate);
+  const endDate = new Date(tripData?.endDate);
+
+  const router = useRouter();
 
   const formattedStartDate = startDate.toLocaleDateString("en-US", {
     year: "numeric",
@@ -24,7 +27,7 @@ const ReviewTrip = () => {
   });
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.container}>
       <View>
         <View style={styles.subContainer}>
           <View style={styles.header}>
@@ -47,14 +50,16 @@ const ReviewTrip = () => {
           <Text style={styles.icon}>📍</Text>
           <View>
             <Text style={styles.title}>Destination</Text>
-            <Text style={styles.description}>{tripData.locationInfo.name}</Text>
+            <Text style={styles.description}>
+              {tripData?.locationInfo.name}
+            </Text>
           </View>
         </View>
         <View style={styles.container3}>
           <Text style={styles.icon}>🧳</Text>
           <View>
             <Text style={styles.title}>Travelers</Text>
-            <Text style={styles.description}>{tripData.traveler.title}</Text>
+            <Text style={styles.description}>{tripData?.traveler.title}</Text>
           </View>
         </View>
         <View style={styles.container3}>
@@ -70,20 +75,20 @@ const ReviewTrip = () => {
           <Text style={styles.icon}>📆</Text>
           <View>
             <Text style={styles.title}>Number of Days</Text>
-            <Text style={styles.description}>{tripData.totalNoOfDays}</Text>
+            <Text style={styles.description}>{tripData?.totalNoOfDays}</Text>
           </View>
         </View>
         <View style={styles.container3}>
           <Text style={styles.icon}>💵</Text>
           <View>
             <Text style={styles.title}>Budget</Text>
-            <Text style={styles.description}>{tripData.budget}</Text>
+            <Text style={styles.description}>{tripData?.budget}</Text>
           </View>
         </View>
         <View style={{ alignItems: "center" }}>
           <TouchableOpacity
             style={styles.continueButton}
-            //   onPress={() => onClickContinue()}
+            onPress={() => router.replace("/create-trip/GenerateTrip")}
           >
             <Text style={styles.buttonText}>
               <FontAwesome6
@@ -179,5 +184,10 @@ const styles = StyleSheet.create({
     fontFamily: "QuickSand-Bold",
     fontSize: 18,
     color: "black",
+  },
+  container: {
+    backgroundColor: Colors.light.background,
+    height: "100%",
+    flex: 1,
   },
 });
