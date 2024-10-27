@@ -19,6 +19,7 @@ import { CreateTripContext } from "../../context/CreateTripContext";
 import { Colors } from "@/constants/Colors";
 import { useRouter } from "expo-router";
 import LocationError from "../../components/Errors/LocationError";
+import { suggestedCities } from "../../constants/Options";
 
 const OLA_API_URL = "https://api.olamaps.io/places/v1/autocomplete";
 const PLACE_DETAILS_URL = "https://api.olamaps.io/places/v1/details";
@@ -27,7 +28,6 @@ const TOKEN_URL =
 const CLIENT_ID = "fb42cbeb-22b6-43c7-a10d-09f6fd8c8121";
 const CLIENT_SECRET = "QrDpu1dSaByajpSaDlcCQX0Z5K8gbbgR";
 
-// Define allowed place types
 const ALLOWED_TYPES = [
   "locality",
   "administrative_area_level_1",
@@ -47,7 +47,7 @@ const SearchPlace = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
-  const [debugInfo, setDebugInfo] = useState(null);
+  const [showSuggestedCities, setShowSuggestedCities] = useState(true);
 
   const { setTripData } = useContext(CreateTripContext);
   const router = useRouter();
@@ -57,9 +57,6 @@ const SearchPlace = () => {
     const initialize = async () => {
       setIsLoading(true);
       try {
-        console.log("Initializing...");
-
-        // Get authentication token
         const tokenResponse = await axios.post(
           TOKEN_URL,
           new URLSearchParams({
@@ -78,10 +75,8 @@ const SearchPlace = () => {
           throw new Error("No access token received");
         }
 
-        console.log("Token received successfully");
         setToken(tokenResponse.data.access_token);
 
-        // Get user location
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") {
           throw new Error("Location permission denied");
@@ -89,23 +84,14 @@ const SearchPlace = () => {
 
         const location = await Location.getCurrentPositionAsync({});
         const { latitude, longitude } = location.coords;
-        const locationString = `${latitude},${longitude}`;
-        console.log("Location obtained:", locationString);
-        setUserLocation(locationString);
-
-        setDebugInfo(`Initialized with location: ${locationString}`);
+        setUserLocation(`${latitude},${longitude}`);
       } catch (error) {
-        console.error("Initialization error:", error);
         setError(
           error.message === "Location permission denied" ? (
             <LocationError />
           ) : (
             `Initialization failed: ${error.message}`
           )
-        );
-        Alert.alert(
-          "Initialization Error",
-          `Failed to initialize: ${error.message}. Please restart the app.`
         );
       } finally {
         setIsLoading(false);
@@ -115,15 +101,9 @@ const SearchPlace = () => {
     initialize();
   }, []);
 
-  // Fetch location suggestions
   const fetchSuggestions = useCallback(
     async (input) => {
       if (!input?.trim() || !token || !userLocation) {
-        console.log("Missing required data:", {
-          hasInput: !!input?.trim(),
-          hasToken: !!token,
-          hasLocation: !!userLocation,
-        });
         setSuggestions([]);
         return;
       }
@@ -132,8 +112,7 @@ const SearchPlace = () => {
       setError(null);
 
       try {
-        console.log("Fetching suggestions for:", input);
-        const requestConfig = {
+        const response = await axios.get(OLA_API_URL, {
           params: {
             input,
             location: userLocation,
@@ -142,13 +121,7 @@ const SearchPlace = () => {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        };
-
-        console.log("Request config:", requestConfig);
-
-        const response = await axios.get(OLA_API_URL, requestConfig);
-
-        console.log("API Response:", response.data);
+        });
 
         if (!response.data?.predictions) {
           throw new Error("No predictions in response");
@@ -159,17 +132,10 @@ const SearchPlace = () => {
             prediction.types?.some((type) => ALLOWED_TYPES.includes(type))
         );
 
-        console.log("Filtered suggestions:", filteredSuggestions);
         setSuggestions(filteredSuggestions);
-        setDebugInfo(`Found ${filteredSuggestions.length} suggestions`);
       } catch (error) {
-        console.error("Suggestion fetch error:", error);
         const errorMessage = error.response?.data?.error || error.message;
         setError(`Failed to fetch suggestions: ${errorMessage}`);
-        Alert.alert(
-          "Search Error",
-          `Failed to fetch suggestions: ${errorMessage}`
-        );
       } finally {
         setIsLoading(false);
       }
@@ -177,7 +143,6 @@ const SearchPlace = () => {
     [token, userLocation]
   );
 
-  // Handle place selection
   const handlePlaceSelection = async (placeId, placeName) => {
     if (!placeId || !token) {
       setError("Invalid place selection");
@@ -188,13 +153,10 @@ const SearchPlace = () => {
     setError(null);
 
     try {
-      console.log("Fetching details for place:", placeId);
       const response = await axios.get(PLACE_DETAILS_URL, {
         params: { place_id: placeId },
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      console.log("Place details response:", response.data);
 
       if (!response.data?.result?.geometry?.location) {
         throw new Error("Invalid place details received");
@@ -210,22 +172,32 @@ const SearchPlace = () => {
 
       router.push("/create-trip/SelectTraveler");
     } catch (error) {
-      console.error("Place selection error:", error);
       setError(`Failed to get place details: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Debounced search handler
+  const handleCitySelection = (city) => {
+    const defaultPlace = city.places[0];
+    setTripData({
+      locationInfo: {
+        name: `${defaultPlace.name}, ${city.city}`,
+        placeId: defaultPlace.place_id,
+      },
+      coordinates: defaultPlace.geometry.location,
+    });
+    router.push("/create-trip/SelectTraveler");
+  };
+
   const debouncedFetchSuggestions = useCallback(
     debounce((text) => fetchSuggestions(text), 300),
     [fetchSuggestions]
   );
 
-  // Input change handler
   const handleInputChange = (text) => {
     setSearchText(text);
+    setShowSuggestedCities(!text.trim());
     if (text.trim()) {
       debouncedFetchSuggestions(text);
     } else {
@@ -233,6 +205,32 @@ const SearchPlace = () => {
     }
   };
 
+  const renderSuggestedCity = ({ item }) => {
+    const placesCount = item.places.length;
+
+    return (
+      <TouchableOpacity
+        style={styles.suggestedCityButton}
+        onPress={() => handleCitySelection(item)}
+      >
+        <View style={styles.cityContent}>
+          <Text style={styles.cityName}>{item.city}</Text>
+          <Text style={styles.placesCount}>{placesCount} places to visit</Text>
+        </View>
+        <View style={styles.placesPreview}>
+          {item.places.slice(0, 2).map((place) => (
+            <Text
+              key={place.place_id}
+              style={styles.placeText}
+              numberOfLines={1}
+            >
+              • {place.name}
+            </Text>
+          ))}
+        </View>
+      </TouchableOpacity>
+    );
+  };
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.subContainer}>
@@ -258,10 +256,6 @@ const SearchPlace = () => {
         )}
 
         {error && <Text style={styles.errorText}>{error}</Text>}
-
-        {debugInfo && __DEV__ && (
-          <Text style={styles.debugText}>{debugInfo}</Text>
-        )}
 
         {suggestions.length > 0 && !isLoading && (
           <FlatList
@@ -289,6 +283,19 @@ const SearchPlace = () => {
             )}
             style={styles.suggestionsList}
           />
+        )}
+
+        {showSuggestedCities && !suggestions.length && !isLoading && (
+          <View style={styles.suggestedCitiesContainer}>
+            <Text style={styles.sectionTitle}>Popular Destinations</Text>
+            <FlatList
+              data={suggestedCities}
+              keyExtractor={(item, index) => `${item.city}-${index}`}
+              renderItem={renderSuggestedCity}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.suggestedListContainer}
+            />
+          </View>
         )}
       </View>
     </SafeAreaView>
@@ -321,6 +328,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 10,
   },
+  placesCount: {
+    fontSize: 12,
+    fontFamily: "QuickSand",
+    color: "#666",
+  },
   searchText: {
     paddingTop: 28,
     fontSize: 20,
@@ -339,24 +351,35 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   input: {
-    height: 40,
-    borderColor: "gray",
+    height: 50,
+    borderColor: "#E0E0E0",
     borderWidth: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 16,
     backgroundColor: "white",
-    borderRadius: 10,
+    borderRadius: 12,
     fontFamily: "QuickSand",
+    fontSize: 16,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   suggestionsList: {
     backgroundColor: "white",
-    borderRadius: 10,
-    marginTop: 5,
+    borderRadius: 12,
+    marginTop: 8,
     maxHeight: "80%",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
   },
   suggestionItem: {
     paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderBottomColor: "#eee",
+    paddingHorizontal: 16,
+    borderBottomColor: "#F0F0F0",
     borderBottomWidth: 1,
   },
   mainText: {
@@ -368,7 +391,7 @@ const styles = StyleSheet.create({
     fontFamily: "QuickSand",
     fontSize: 14,
     color: "#666",
-    marginTop: 2,
+    marginTop: 4,
   },
   loader: {
     marginVertical: 20,
@@ -379,11 +402,53 @@ const styles = StyleSheet.create({
     fontFamily: "QuickSand",
     textAlign: "center",
   },
-  debugText: {
+  suggestedCitiesContainer: {
+    marginTop: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: "QuickSand-Bold",
+    marginBottom: 16,
+    color: "#333",
+  },
+  suggestedListContainer: {
+    paddingBottom: 20,
+  },
+  suggestedCityButton: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 6,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  cityContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  cityName: {
+    fontSize: 16,
+    fontFamily: "QuickSand-SemiBold",
+    color: "#333",
+  },
+  placesPreview: {
+    marginTop: 4,
+  },
+  placeText: {
+    fontSize: 13,
+    fontFamily: "QuickSand",
     color: "#666",
-    marginVertical: 5,
-    fontSize: 12,
-    textAlign: "center",
+    marginVertical: 2,
   },
 });
 
