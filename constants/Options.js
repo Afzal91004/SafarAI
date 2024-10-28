@@ -350,21 +350,4 @@ export const suggestedCities = [
       },
     ],
   },
-  {
-    city: "Khajuraho",
-    places: [
-      {
-        name: "Khajuraho Temples",
-        description:
-          "A group of Hindu and Jain temples famous for their intricate erotic sculptures.",
-        place_id: "place_id_khajuraho_temples",
-        geometry: {
-          location: {
-            lat: 24.8324,
-            lng: 79.9193,
-          },
-        },
-      },
-    ],
-  },
 ];

@@ -5,21 +5,25 @@ import {
   TextInput,
   TouchableOpacity,
   ToastAndroid,
+  Alert,
 } from "react-native";
 import React, { useState } from "react";
 import { Colors } from "@/constants/Colors";
 import * as Animatable from "react-native-animatable";
-import { Link } from "expo-router";
+import { Link, router } from "expo-router";
 import GoBack from "../../../components/GoBack";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../../../config/FirebaseConfig";
+import { auth, sendVerificationEmail } from "../../../config/FirebaseConfig";
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "../../../config/FirebaseConfig";
 
 const SignUp = () => {
-  const [email, setEmail] = useState();
-  const [password, setPassword] = useState();
-  const [name, setName] = useState();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const onCreateAccount = () => {
+  const onCreateAccount = async () => {
     if (
       !email ||
       !password ||
@@ -31,18 +35,61 @@ const SignUp = () => {
       ToastAndroid.show("Please Enter All Details", ToastAndroid.BOTTOM);
       return;
     }
-    createUserWithEmailAndPassword(auth, email, password)
-      .then((userCredential) => {
-        // Signed up
-        const user = userCredential.user;
-        console.log("user: ", user);
-      })
-      .catch((error) => {
-        const errorCode = error.code;
-        const errorMessage = error.message;
-        console.log("email: ", email);
-        console.log("error: ", errorMessage); // Log the error message for better debugging
+
+    setLoading(true);
+    try {
+      // Create user account
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+      const user = userCredential.user;
+
+      // Save user data to Firestore
+      await setDoc(doc(db, "users", user.uid), {
+        name: name,
+        email: email,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
+
+      // Send verification email
+      const emailSent = await sendVerificationEmail(user);
+
+      if (emailSent) {
+        Alert.alert(
+          "Verification Email Sent",
+          "Please check your email to verify your account before signing in.",
+          [
+            {
+              text: "OK",
+              onPress: () => router.replace("/auth/sign-in/Index"),
+            },
+          ]
+        );
+      } else {
+        ToastAndroid.show(
+          "Failed to send verification email",
+          ToastAndroid.BOTTOM
+        );
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      let errorMessage = "An error occurred during sign up";
+
+      if (error.code === "auth/email-already-in-use") {
+        errorMessage = "This email is already registered";
+      } else if (error.code === "auth/invalid-email") {
+        errorMessage = "Invalid email address";
+      } else if (error.code === "auth/weak-password") {
+        errorMessage = "Password should be at least 8 characters";
+      }
+
+      ToastAndroid.show(errorMessage, ToastAndroid.BOTTOM);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -60,8 +107,9 @@ const SignUp = () => {
             <Text style={styles.text}>Name</Text>
             <TextInput
               style={styles.input}
-              onChangeText={(value) => setName(value)}
+              onChangeText={setName}
               placeholder="Enter your Name"
+              value={name}
             />
           </Animatable.View>
 
@@ -69,8 +117,11 @@ const SignUp = () => {
             <Text style={styles.text}>Email</Text>
             <TextInput
               style={styles.input}
-              onChangeText={(value) => setEmail(value)}
+              onChangeText={setEmail}
               placeholder="Enter your Email"
+              value={email}
+              keyboardType="email-address"
+              autoCapitalize="none"
             />
           </Animatable.View>
 
@@ -79,11 +130,16 @@ const SignUp = () => {
             <TextInput
               secureTextEntry={true}
               style={styles.input}
-              onChangeText={(value) => setPassword(value)}
+              onChangeText={setPassword}
               placeholder="Enter your Password"
+              value={password}
             />
             <View>
-              <TouchableOpacity style={styles.login} onPress={onCreateAccount}>
+              <TouchableOpacity
+                style={[styles.login, loading && styles.loginDisabled]}
+                onPress={onCreateAccount}
+                disabled={loading}
+              >
                 <Text
                   style={{
                     color: "white",
@@ -91,7 +147,7 @@ const SignUp = () => {
                     fontSize: 20,
                   }}
                 >
-                  Create Account
+                  {loading ? "Creating Account..." : "Create Account"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -102,7 +158,7 @@ const SignUp = () => {
                   fontSize: 15,
                 }}
               >
-                Don't have an account?{" "}
+                Already have an account?{" "}
                 <Link href={"/auth/sign-in/Index"}>
                   <Text
                     style={{
@@ -169,5 +225,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     top: "5%",
     marginVertical: 14,
+  },
+  loginDisabled: {
+    backgroundColor: Colors.SECONDARY,
   },
 });

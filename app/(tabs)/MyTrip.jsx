@@ -5,8 +5,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   FlatList,
+  BackHandler,
+  ToastAndroid,
+  Platform,
+  useWindowDimensions,
 } from "react-native";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import Header from "../../components/Header";
 import { Colors } from "@/constants/Colors";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -14,23 +18,66 @@ import StartNewTripCard from "../../components/MyTrips/StartNewTripCard";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import UserTripList from "../../components/MyTrips/UserTripList";
 import { auth, db } from "../../config/FirebaseConfig";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import * as Location from "expo-location";
 
 const MyTrip = () => {
   const [userTrips, setUserTrips] = useState([]);
   const [loading, setLoading] = useState(false);
   const [locationPermission, setLocationPermission] = useState(null);
+  const [lastBackPressed, setLastBackPressed] = useState(0);
   const router = useRouter();
   const flatListRef = useRef(null);
   const { scrollToTop } = useLocalSearchParams();
+  const { width: screenWidth } = useWindowDimensions();
 
   const user = auth.currentUser;
 
+  // Calculate responsive values
+  const isLargeScreen = screenWidth >= 768; // Tablet/Desktop breakpoint
+  const contentMaxWidth = isLargeScreen
+    ? Math.min(1200, screenWidth * 0.8)
+    : screenWidth;
+  const paddingHorizontal = isLargeScreen
+    ? Math.max(40, (screenWidth - contentMaxWidth) / 2)
+    : 25;
+  const headerFontSize = isLargeScreen ? 42 : 35;
+
+  // Prevent default back navigation and handle app exit
+  useFocusEffect(
+    useCallback(() => {
+      const handleBackPress = () => {
+        const currentTime = new Date().getTime();
+
+        if (currentTime - lastBackPressed < 2000) {
+          BackHandler.exitApp();
+          return true;
+        }
+
+        setLastBackPressed(currentTime);
+        if (Platform.OS === "android") {
+          ToastAndroid.show("Press back again to exit", ToastAndroid.SHORT);
+        }
+        return true;
+      };
+
+      BackHandler.addEventListener("hardwareBackPress", handleBackPress);
+      return () =>
+        BackHandler.removeEventListener("hardwareBackPress", handleBackPress);
+    }, [lastBackPressed])
+  );
+
   useEffect(() => {
-    user && getMyTrips();
-    requestLocationPermission();
+    if (user) {
+      getMyTrips();
+    } else {
+      router.replace("/auth/sign-in/Index");
+    }
   }, [user]);
+
+  useEffect(() => {
+    requestLocationPermission();
+  }, []);
 
   useEffect(() => {
     if (scrollToTop === "true" && flatListRef.current) {
@@ -39,19 +86,23 @@ const MyTrip = () => {
   }, [scrollToTop]);
 
   const requestLocationPermission = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(status === "granted");
+      if (status === "granted") {
+        getCurrentLocation();
+      }
+    } catch (error) {
+      console.error("Error requesting location permission:", error);
       setLocationPermission(false);
-      console.log("Permission to access location was denied");
-      return;
     }
-    setLocationPermission(true);
-    getCurrentLocation();
   };
 
   const getCurrentLocation = async () => {
     try {
-      const location = await Location.getCurrentPositionAsync({});
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
       console.log("Current location:", location);
     } catch (error) {
       console.error("Error getting location:", error);
@@ -59,19 +110,37 @@ const MyTrip = () => {
   };
 
   const getMyTrips = async () => {
-    setLoading(true);
-    setUserTrips([]);
-    const q = query(
-      collection(db, "UserTrips"),
-      where("userEmail", "==", user?.email)
-    );
-    const querySnapShot = await getDocs(q);
+    if (!user?.email) return;
 
-    querySnapShot.forEach((doc) => {
-      console.log(doc.id, " => ", doc.data());
-      setUserTrips((prev) => [...prev, doc.data()]);
-    });
-    setLoading(false);
+    setLoading(true);
+    try {
+      const q = query(
+        collection(db, "UserTrips"),
+        where("userEmail", "==", user.email)
+      );
+      const querySnapshot = await getDocs(q);
+
+      const trips = [];
+      querySnapshot.forEach((doc) => {
+        trips.push({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate?.() || new Date(),
+        });
+      });
+
+      trips.sort((a, b) => b.createdAt - a.createdAt);
+      setUserTrips(trips);
+    } catch (error) {
+      console.error("Error fetching trips:", error);
+      Alert.alert(
+        "Error",
+        "Failed to load your trips. Please check your connection and try again.",
+        [{ text: "OK" }]
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAddTrip = () => {
@@ -81,16 +150,22 @@ const MyTrip = () => {
     });
   };
 
+  const handleRefresh = () => {
+    getMyTrips();
+  };
+
   const ListHeaderComponent = () => (
     <View>
-      <View style={styles.Heading}>
-        <Text style={styles.HeadingText}>My Trips</Text>
-        <TouchableOpacity onPress={handleAddTrip}>
-          <View style={styles.addTrip}>
+      <View style={[styles.heading, { marginBottom: isLargeScreen ? 20 : 10 }]}>
+        <Text style={[styles.headingText, { fontSize: headerFontSize }]}>
+          My Trips
+        </Text>
+        <TouchableOpacity onPress={handleAddTrip} style={styles.addTripButton}>
+          <View style={[styles.addTrip, { padding: isLargeScreen ? 5 : 0 }]}>
             <MaterialIcons
               name="add-location-alt"
-              size={30}
-              style={{ padding: 7 }}
+              size={isLargeScreen ? 36 : 30}
+              style={[styles.addTripIcon, { padding: isLargeScreen ? 10 : 7 }]}
               color="white"
             />
           </View>
@@ -99,9 +174,9 @@ const MyTrip = () => {
 
       {loading && (
         <ActivityIndicator
-          size={"large"}
+          size={isLargeScreen ? "large" : "small"}
           color={Colors.PRIMARY}
-          style={{ paddingTop: 30 }}
+          style={styles.loader}
         />
       )}
     </View>
@@ -109,23 +184,41 @@ const MyTrip = () => {
 
   const renderContent = () => {
     if (!loading && userTrips?.length === 0) {
-      return <StartNewTripCard />;
+      return <StartNewTripCard onStartTrip={handleAddTrip} />;
     }
-    return <UserTripList userTrips={userTrips} />;
+    return (
+      <UserTripList
+        userTrips={userTrips}
+        onRefresh={handleRefresh}
+        isRefreshing={loading}
+        isLargeScreen={isLargeScreen}
+      />
+    );
   };
 
   return (
-    <View style={{ backgroundColor: Colors.light.background, flex: 1 }}>
+    <View style={styles.container}>
       <Header />
-      <FlatList
-        ref={flatListRef}
-        ListHeaderComponent={ListHeaderComponent}
-        data={[{ key: "content" }]} // Single item for the main content
-        renderItem={() => renderContent()}
-        style={styles.Container}
-        contentContainerStyle={styles.ContentContainer}
-        scrollEventThrottle={16}
-      />
+      <View
+        style={[
+          styles.contentWrapper,
+          { maxWidth: contentMaxWidth, alignSelf: "center" },
+        ]}
+      >
+        <FlatList
+          ref={flatListRef}
+          ListHeaderComponent={ListHeaderComponent}
+          data={[{ key: "content" }]}
+          renderItem={() => renderContent()}
+          style={styles.listContainer}
+          contentContainerStyle={[
+            styles.contentContainer,
+            { paddingHorizontal: paddingHorizontal },
+          ]}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
     </View>
   );
 };
@@ -133,27 +226,42 @@ const MyTrip = () => {
 export default MyTrip;
 
 const styles = StyleSheet.create({
-  Container: {
+  container: {
+    flex: 1,
+    backgroundColor: Colors.light.background,
+  },
+  contentWrapper: {
+    flex: 1,
+    width: "100%",
+  },
+  listContainer: {
     flex: 1,
   },
-  ContentContainer: {
-    paddingHorizontal: 25,
+  contentContainer: {
     paddingTop: 5,
-    paddingBottom: 120,
+    paddingBottom: 20,
   },
-  Heading: {
-    display: "flex",
+  heading: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  HeadingText: {
+  headingText: {
     fontFamily: "QuickSand-Bold",
-    fontSize: 35,
     textDecorationLine: "underline",
+  },
+  addTripButton: {
+    elevation: 3,
   },
   addTrip: {
     backgroundColor: Colors.PRIMARY,
     borderRadius: 26,
+    elevation: 3,
+  },
+  addTripIcon: {
+    padding: 7,
+  },
+  loader: {
+    paddingTop: 30,
   },
 });

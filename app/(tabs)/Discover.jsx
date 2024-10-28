@@ -8,7 +8,8 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
-  Alert,
+  Dimensions,
+  useWindowDimensions,
 } from "react-native";
 import axios from "axios";
 import { debounce } from "lodash";
@@ -41,6 +42,10 @@ const ALLOWED_TYPES = [
 ];
 
 const SearchPlace = () => {
+  const { width, height } = useWindowDimensions();
+  const isLargeScreen = width >= 768; // Tablet/Desktop breakpoint
+  const isExtraLargeScreen = width >= 1024; // Large desktop breakpoint
+
   const [searchText, setSearchText] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [token, setToken] = useState(null);
@@ -205,17 +210,22 @@ const SearchPlace = () => {
     }
   };
 
-  const renderSuggestedCity = ({ item }) => {
-    const placesCount = item.places.length;
-
+  const renderSuggestedCity = ({ item, index }) => {
+    const isLastItem = index === suggestedCities.length - 1;
     return (
       <TouchableOpacity
-        style={styles.suggestedCityButton}
+        style={[
+          styles.suggestedCityButton,
+          isLargeScreen && styles.suggestedCityButtonTablet,
+          !isLastItem && styles.suggestedCityButtonMargin,
+        ]}
         onPress={() => handleCitySelection(item)}
       >
         <View style={styles.cityContent}>
           <Text style={styles.cityName}>{item.city}</Text>
-          <Text style={styles.placesCount}>{placesCount} places to visit</Text>
+          <Text style={styles.placesCount}>
+            {item.places.length} places to visit
+          </Text>
         </View>
         <View style={styles.placesPreview}>
           {item.places.slice(0, 2).map((place) => (
@@ -231,72 +241,127 @@ const SearchPlace = () => {
       </TouchableOpacity>
     );
   };
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.subContainer}>
+      <View
+        style={[
+          styles.subContainer,
+          isLargeScreen && styles.subContainerTablet,
+        ]}
+      >
         <View style={styles.header}>
           <GoBack color="white" />
-          <Text style={styles.searchText}>Search Location</Text>
+          <Text
+            style={[
+              styles.searchText,
+              isLargeScreen && styles.searchTextTablet,
+            ]}
+          >
+            Search Location
+          </Text>
         </View>
         <View style={styles.hr} />
       </View>
 
-      <View style={styles.subContainer2}>
-        <TextInput
-          style={styles.input}
-          placeholder="Search for a city, district, or country"
-          value={searchText}
-          onChangeText={handleInputChange}
-          autoFocus={true}
-          autoCorrect={false}
-        />
-
-        {isLoading && (
-          <ActivityIndicator style={styles.loader} color={Colors.PRIMARY} />
-        )}
-
-        {error && <Text style={styles.errorText}>{error}</Text>}
-
-        {suggestions.length > 0 && !isLoading && (
-          <FlatList
-            data={suggestions}
-            keyExtractor={(item, index) => `${item.place_id}-${index}`}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                onPress={() =>
-                  handlePlaceSelection(
-                    item.place_id,
-                    item.structured_formatting?.main_text || item.description
-                  )
-                }
-                style={styles.suggestionItem}
-              >
-                <Text style={styles.mainText}>
-                  {item.structured_formatting?.main_text || item.description}
-                </Text>
-                {item.structured_formatting?.secondary_text && (
-                  <Text style={styles.secondaryText}>
-                    {item.structured_formatting.secondary_text}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            )}
-            style={styles.suggestionsList}
+      <View
+        style={[
+          styles.subContainer2,
+          isLargeScreen && styles.subContainer2Tablet,
+        ]}
+      >
+        <View
+          style={[
+            styles.searchContainer,
+            isLargeScreen && styles.searchContainerTablet,
+          ]}
+        >
+          <TextInput
+            style={[styles.input, isLargeScreen && styles.inputTablet]}
+            placeholder="Search for a city, district, or country"
+            value={searchText}
+            onChangeText={handleInputChange}
+            autoFocus={true}
+            autoCorrect={false}
           />
-        )}
 
-        {showSuggestedCities && !suggestions.length && !isLoading && (
-          <View style={styles.suggestedCitiesContainer}>
-            <Text style={styles.sectionTitle}>Popular Destinations</Text>
+          {isLoading && (
+            <ActivityIndicator style={styles.loader} color={Colors.PRIMARY} />
+          )}
+
+          {error && <Text style={styles.errorText}>{error}</Text>}
+        </View>
+
+        <View
+          style={[
+            styles.resultsContainer,
+            isLargeScreen && styles.resultsContainerTablet,
+          ]}
+        >
+          {suggestions.length > 0 && !isLoading && (
             <FlatList
-              data={suggestedCities}
-              keyExtractor={(item, index) => `${item.city}-${index}`}
-              renderItem={renderSuggestedCity}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.suggestedListContainer}
+              data={suggestions}
+              keyExtractor={(item, index) => `${item.place_id}-${index}`}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  onPress={() =>
+                    handlePlaceSelection(
+                      item.place_id,
+                      item.structured_formatting?.main_text || item.description
+                    )
+                  }
+                  style={[
+                    styles.suggestionItem,
+                    isLargeScreen && styles.suggestionItemTablet,
+                  ]}
+                >
+                  <Text style={styles.mainText}>
+                    {item.structured_formatting?.main_text || item.description}
+                  </Text>
+                  {item.structured_formatting?.secondary_text && (
+                    <Text style={styles.secondaryText}>
+                      {item.structured_formatting.secondary_text}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              style={[
+                styles.suggestionsList,
+                isLargeScreen && styles.suggestionsListTablet,
+              ]}
             />
-          </View>
-        )}
+          )}
+
+          {showSuggestedCities && !suggestions.length && !isLoading && (
+            <View
+              style={[
+                styles.suggestedCitiesContainer,
+                isLargeScreen && styles.suggestedCitiesContainerTablet,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  isLargeScreen && styles.sectionTitleTablet,
+                ]}
+              >
+                Popular Destinations
+              </Text>
+              <FlatList
+                data={suggestedCities}
+                keyExtractor={(item, index) => `${item.city}-${index}`}
+                renderItem={renderSuggestedCity}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={[
+                  styles.suggestedListContainer,
+                  isLargeScreen && styles.suggestedListContainerTablet,
+                ]}
+                numColumns={isExtraLargeScreen ? 3 : isLargeScreen ? 2 : 1}
+                key={isExtraLargeScreen ? 3 : isLargeScreen ? 2 : 1}
+              />
+            </View>
+          )}
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -323,15 +388,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.PRIMARY,
     marginTop: -40,
   },
+  subContainerTablet: {
+    marginTop: 0,
+    paddingVertical: 20,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 10,
-  },
-  placesCount: {
-    fontSize: 12,
-    fontFamily: "QuickSand",
-    color: "#666",
   },
   searchText: {
     paddingTop: 28,
@@ -339,6 +403,10 @@ const styles = StyleSheet.create({
     fontFamily: "QuickSand-Medium",
     marginLeft: "10%",
     color: "white",
+  },
+  searchTextTablet: {
+    fontSize: 24,
+    paddingTop: 0,
   },
   hr: {
     borderBottomColor: "rgba(0,0,0, 0.2)",
@@ -349,6 +417,19 @@ const styles = StyleSheet.create({
   subContainer2: {
     padding: 25,
     flex: 1,
+  },
+  subContainer2Tablet: {
+    padding: 40,
+    maxWidth: 1200,
+    alignSelf: "center",
+    width: "100%",
+  },
+  searchContainer: {
+    width: "100%",
+  },
+  searchContainerTablet: {
+    maxWidth: 600,
+    alignSelf: "center",
   },
   input: {
     height: 50,
@@ -368,6 +449,18 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  inputTablet: {
+    height: 60,
+    fontSize: 18,
+    paddingHorizontal: 24,
+  },
+  resultsContainer: {
+    flex: 1,
+    marginTop: 16,
+  },
+  resultsContainerTablet: {
+    marginTop: 24,
+  },
   suggestionsList: {
     backgroundColor: "white",
     borderRadius: 12,
@@ -376,11 +469,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E0E0E0",
   },
+  suggestionsListTablet: {
+    maxWidth: 800,
+    alignSelf: "center",
+    width: "100%",
+  },
   suggestionItem: {
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomColor: "#F0F0F0",
     borderBottomWidth: 1,
+  },
+  suggestionItemTablet: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
   },
   mainText: {
     fontFamily: "QuickSand-SemiBold",
@@ -401,9 +503,16 @@ const styles = StyleSheet.create({
     marginVertical: 10,
     fontFamily: "QuickSand",
     textAlign: "center",
+    fontSize: 14,
   },
   suggestedCitiesContainer: {
     marginTop: 24,
+    flex: 1,
+  },
+  suggestedCitiesContainerTablet: {
+    maxWidth: 1200,
+    alignSelf: "center",
+    width: "100%",
   },
   sectionTitle: {
     fontSize: 18,
@@ -411,14 +520,24 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     color: "#333",
   },
+  sectionTitleTablet: {
+    fontSize: 24,
+    marginBottom: 24,
+    textAlign: "center",
+  },
   suggestedListContainer: {
     paddingBottom: 20,
+  },
+  suggestedListContainerTablet: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 16,
   },
   suggestedCityButton: {
     backgroundColor: "white",
     borderRadius: 12,
     padding: 16,
-    marginVertical: 6,
     elevation: 2,
     shadowColor: "#000",
     shadowOffset: {
@@ -430,6 +549,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E0E0E0",
   },
+  suggestedCityButtonTablet: {
+    flex: 1,
+    minWidth: 300,
+    maxWidth: 400,
+    margin: 8,
+  },
+  suggestedCityButtonMargin: {
+    marginBottom: 12,
+  },
   cityContent: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -440,6 +568,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "QuickSand-SemiBold",
     color: "#333",
+  },
+  placesCount: {
+    fontSize: 12,
+    fontFamily: "QuickSand",
+    color: "#666",
   },
   placesPreview: {
     marginTop: 4,

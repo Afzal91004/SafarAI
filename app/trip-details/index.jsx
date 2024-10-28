@@ -109,6 +109,7 @@ const TripDetails = () => {
     attractions = [],
     accommodation = [],
     transportation = {},
+    hotels = [],
   } = tripPlan;
 
   console.log(tripPlan);
@@ -382,7 +383,7 @@ const TripDetails = () => {
               <View key={index} style={styles.attractionCard}>
                 <View style={styles.attractionInfo}>
                   <Text style={styles.attractionName}>
-                    {String(attraction.placeName)}
+                    {String(attraction.placeName || attraction.name)}
                   </Text>
                   <Text style={styles.attractionDescription}>
                     {String(attraction.description)}
@@ -410,6 +411,35 @@ const TripDetails = () => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Suggested Accommodations</Text>
             {accommodation.map((place, index) => (
+              <View key={index} style={styles.accommodationCard}>
+                <Text style={styles.hotelName}>
+                  {String(place.name || place.hotelName)}
+                </Text>
+                <Text style={styles.hotelDetails}>
+                  ⭐ {String(place.rating)}
+                </Text>
+                <Text style={styles.hotelDetails}>
+                  💰 {formatPrice(place.price)}
+                </Text>
+                <Text style={styles.hotelDetails}>
+                  📍 {String(place.address)}
+                </Text>
+                <View style={styles.buttonContainer}>
+                  <TouchableOpacity
+                    style={[styles.hotelButton, styles.mapButton]}
+                    onPress={() => handleOpenMap(place.address)}
+                  >
+                    <Text style={styles.buttonText}>View on Map 🗺️ </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+        {hotels.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Suggested Accommodations</Text>
+            {hotels.map((place, index) => (
               <View key={index} style={styles.accommodationCard}>
                 <Text style={styles.hotelName}>
                   {String(place.name || place.hotelName)}

@@ -27,7 +27,7 @@ const styles = StyleSheet.create({
 
     // Shadow for iOS
     shadowColor: Colors.PRIMARYSHADOW, // Shadow color (use a darker shade of the primary color)
-    shadowOffset: { width: 80, height: 40 }, // Shadow direction
+    shadowOffset: { width: 6, height: 2 }, // Shadow direction
     shadowOpacity: 1, // Between 0 and 1
     shadowRadius: 5, // Spread of the shadow
 

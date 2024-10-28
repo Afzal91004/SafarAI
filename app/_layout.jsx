@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { View } from "react-native";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { CreateTripContext } from "@/context/CreateTripContext";
 
-SplashScreen.preventAutoHideAsync(); // Keep the splash screen until we are ready
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  // Load fonts, ensure this hook is always called consistently
+  // Load all your fonts
   const [fontsLoaded] = useFonts({
     QuickSand: require("../assets/fonts/Quicksand-Regular.ttf"),
     "QuickSand-Medium": require("../assets/fonts/Quicksand-Medium.ttf"),
@@ -16,35 +18,51 @@ export default function RootLayout() {
     "QuickSand-SemiBold": require("../assets/fonts/Quicksand-SemiBold.ttf"),
   });
 
-  const [isSplashReady, setSplashReady] = useState(false); // Ensure splash is properly controlled
-  const [tripData, setTripData] = useState([]); // Ensure consistent hook ordering
+  const [appIsReady, setAppIsReady] = useState(false);
+  const [tripData, setTripData] = useState([]);
 
-  // Avoid conditional hook calls: This will always be called
+  // Prepare the app
   useEffect(() => {
-    const hideSplash = async () => {
-      if (fontsLoaded) {
-        await SplashScreen.hideAsync(); // Safely hide the splash screen when ready
-        setSplashReady(true);
+    async function prepare() {
+      try {
+        // Add any additional initialization logic here
+        // For example: API calls, data loading, etc.
+        // Artificial delay for development purposes - remove in production
+        // await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (error) {
+        console.warn(error);
+      } finally {
+        setAppIsReady(true);
       }
-    };
-    hideSplash();
-  }, [fontsLoaded]); // Trigger effect based on fontsLoaded state
+    }
 
-  // Ensuring hooks execution isn't altered by returns
-  if (!fontsLoaded || !isSplashReady) {
-    return null; // Ensure null is returned until everything is ready
+    prepare();
+  }, []);
+
+  // Handle layout
+  const onLayoutRootView = useCallback(async () => {
+    if (appIsReady && fontsLoaded) {
+      await SplashScreen.hideAsync();
+    }
+  }, [appIsReady, fontsLoaded]);
+
+  // Don't render anything until we're ready
+  if (!appIsReady || !fontsLoaded) {
+    return null;
   }
 
-  // No hooks or state manipulation below this line; safe to render
+  // Render the app
   return (
-    <CreateTripContext.Provider value={{ tripData, setTripData }}>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-        }}
-      >
-        <Stack.Screen name="(tabs)" />
-      </Stack>
-    </CreateTripContext.Provider>
+    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <CreateTripContext.Provider value={{ tripData, setTripData }}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+          }}
+        >
+          <Stack.Screen name="(tabs)" />
+        </Stack>
+      </CreateTripContext.Provider>
+    </View>
   );
 }
